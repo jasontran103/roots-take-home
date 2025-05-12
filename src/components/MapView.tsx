@@ -1,3 +1,4 @@
+"use client";
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import type { Listing } from '@/generated/prisma';
