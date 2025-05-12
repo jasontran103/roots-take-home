@@ -15,7 +15,7 @@ const MainNav: React.FC<MainNavProps> = ({ tabs, currentTab, onTabChange }) => {
   if (!tabs.length) return null;
   return (
     <div className="bg-white border-b-4 border-neo-black sticky top-0 z-10">
-      <div className="container mx-auto py-3">
+      <div className="neo-container mx-auto py-3">
         <Tabs
           value={currentTab}
           onValueChange={onTabChange}
