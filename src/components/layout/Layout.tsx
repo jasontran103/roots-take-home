@@ -1,9 +1,10 @@
 "use client";
 import React, { useState } from 'react';
 import Header from './Header';
-import MainNav from './MainNav';
+import CategoryFilters from '@/components/filters/CategoryFilter';
 
 interface LayoutProps {
+
   children: React.ReactNode;
   tabs?: {
     value: string;
@@ -30,9 +31,12 @@ const Layout: React.FC<LayoutProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-white">
+    <div className="flex flex-col min-h-screen w-full bg-white">
       <Header />
-      <MainNav tabs={tabs} currentTab={currentTab} onTabChange={handleTabChange} />
+      <CategoryFilters
+        activeCategory={currentTab as any}
+        onCategoryChange={handleTabChange}
+      />
       <main className="flex-1 flex flex-col">
         {children}
       </main>

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { HeartIcon, UserIcon, HomeIcon } from 'lucide-react';
 
 const Header = () => (
-  <header className="text-neo-black border-b-4 border-neo-black py-4 px-6 bg-white">
+  <header className="text-neo-black border-b-8 border-black py-4">
     <div className="neo-container mx-auto flex justify-between items-center">
       <div className="flex items-center">
         <div className="w-10 h-10 bg-neo-primary border-4 border-neo-black flex items-center justify-center mr-3">
