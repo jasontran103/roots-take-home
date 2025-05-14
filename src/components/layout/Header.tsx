@@ -3,25 +3,24 @@ import { Button } from '@/components/ui/button';
 import { HeartIcon, UserIcon, HomeIcon } from 'lucide-react';
 
 const Header = () => (
-  <div className="text-sm text-white">
-  <div className="text-neo-black border-b-8 border-black py-4">
-    <div className="mx-auto flex justify-between items-center">
+  <div className="bg-white border-b-4 border-neo-black py-4">
+    <div className="mx-auto flex justify-between items-center px-4">
       <div className="flex items-center">
         <div className="w-10 h-10 bg-neo-primary border-4 border-neo-black flex items-center justify-center mr-3">
           <HomeIcon className="h-6 w-6 text-neo-black" />
         </div>
         <div>
-          <div className="text-2xl font-bold">Roots</div>
-          <div className="text-sm">Find Your Next Home</div>
+          <div className="text-2xl font-bold text-neo-black">Roots</div>
+          <div className="text-sm text-neo-black">Find Your Next Home</div>
         </div>
       </div>
-      <div className="hidden sm:flex gap-3 items-center space-x-3">
-        <Button className="neo-button-primary flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <Button className="neo-button-primary flex items-center [&>*:not(:last-child)]:mr-2">
           <HeartIcon className="h-4 w-4" />
           <span>Saved</span>
         </Button>
-        <Button className="neo-button-primary">
-          <UserIcon className="h-4 w-4 mr-2" />
+        <Button className="neo-button-primary flex items-center [&>*:not(:last-child)]:mr-2">
+          <UserIcon className="h-4 w-4" />
           <span>Sign In</span>
         </Button>
       </div>
@@ -31,7 +30,6 @@ const Header = () => (
         </Button>
       </div>
     </div>
-  </div>
   </div>
 );
 
