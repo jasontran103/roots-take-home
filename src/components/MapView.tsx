@@ -6,6 +6,7 @@ import { ListingStatus } from '@/generated/prisma';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
+import { toggleFavorite, isFavorite } from '@/utils/localStorageUtils';
 import { PropertyInfoCard } from './property/PropertyInfoCard';
 import { PropertyCard } from './property/PropertyCard';
 import { FiltersPanel } from '@/components/filters/FiltersPanel';
@@ -255,10 +256,10 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
         property.id === selectedProperty?.id ? 'ring-4 ring-neo-red scale-125 z-50' : 
         property.id === hoveredProperty?.id ? 'scale-110' : ''
       } ${
-        favorites.includes(property.id) ? 'bg-neo-yellow' : 
+        isFavorite(property.id) ? 'bg-neo-yellow' : 
         property.isAssumable ? 'bg-neo-green' : 
         property.status === ListingStatus.PENDING ? 'bg-amber-300' : 
-        property.status === ListingStatus.SOLD ? 'bg-gray-400' : 'bg-neo-blue'
+        property.status === ListingStatus.SOLD ? 'bg-gray-400' : 'bg-neo-primary'
       }`;
       
       // Format price as monthly payment
@@ -332,21 +333,19 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
   };
 
   const handleToggleFavorite = (propertyId: string) => {
-    const isFav = favorites.includes(propertyId);
-    if (!isFav) {
+    const isFav = toggleFavorite(propertyId);
+    if (isFav) {
       toast({
         title: "Added to Favorites",
         description: "Property has been added to your favorites.",
       });
       setFavorites(prev => [...prev, propertyId]);
-      localStorage.setItem('propertyFavorites', JSON.stringify([...favorites, propertyId]));
     } else {
       toast({
         title: "Removed from Favorites",
         description: "Property has been removed from your favorites.",
       });
       setFavorites(prev => prev.filter(id => id !== propertyId));
-      localStorage.setItem('propertyFavorites', JSON.stringify(favorites.filter(id => id !== propertyId)));
     }
     
     // Update markers to reflect new favorite status
