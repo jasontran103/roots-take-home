@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
 
     return config;
   },
-  // Disable React strict mode for development
+  // Disable React strict mode for development need to change tis for production
   reactStrictMode: false,
   // Enable experimental features
   experimental: {
