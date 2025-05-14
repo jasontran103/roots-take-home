@@ -1,7 +1,26 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  env: {
+    NEXT_PUBLIC_MAPBOX_API_SECRET_KEY: process.env.NEXT_PUBLIC_MAPBOX_API_SECRET_KEY,
+  },
+  webpack: (config, { isServer }) => {
+    // Add any webpack customizations here
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+    };
+
+    return config;
+  },
+  // Disable React strict mode for development
+  reactStrictMode: false,
+  // Enable experimental features
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '2mb'
+    }
+  },
 };
 
 export default nextConfig;
