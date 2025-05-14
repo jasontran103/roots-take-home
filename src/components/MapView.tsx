@@ -20,6 +20,10 @@ interface MapViewProps {
 // Mapbox token from environment variables
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_API_SECRET_KEY || '';
 
+// Add debug logging
+console.log('Mapbox token length:', MAPBOX_TOKEN.length);
+console.log('Mapbox token first 4 chars:', MAPBOX_TOKEN.substring(0, 4));
+
 // Add helper function to get status background color
 const getStatusBackground = (status: ListingStatus, isAssumable: boolean, isFavorite: boolean): string => {
   if (isFavorite) return 'bg-neo-yellow';
@@ -61,9 +65,9 @@ const getStatusColor = (status: ListingStatus): string => {
     case ListingStatus.PENDING:
       return 'text-neo-yellow';
     case ListingStatus.SOLD:
-      return 'text-gray-500';
+      return 'text-neo-500';
     default:
-      return 'text-gray-500';
+      return 'text-neo-primary';
   }
 };
 
@@ -154,12 +158,22 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
 
   // Initialize Mapbox map when token is provided
   useEffect(() => {
-    if (!MAPBOX_TOKEN || !mapContainerRef.current) {
-      console.log('Missing Mapbox token or container ref');
+    if (!MAPBOX_TOKEN) {
+      console.error('Missing Mapbox token');
+      toast({
+        title: "Map Error",
+        description: "Mapbox token is missing. Please check your environment variables.",
+        variant: "destructive",
+      });
       return;
     }
     
-    console.log('Initializing map with token:', MAPBOX_TOKEN);
+    if (!mapContainerRef.current) {
+      console.error('Missing map container ref');
+      return;
+    }
+    
+    console.log('Initializing map with token length:', MAPBOX_TOKEN.length);
     
     // Initialize map
     mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -180,13 +194,23 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
 
       // When map is loaded
       map.current.on('load', () => {
-        console.log('Map loaded, adding markers for properties:', properties);
+        console.log('Map loaded successfully');
         setMapLoaded(true);
         // Add markers for properties
         updateMapMarkers(properties);
         
         // Fit map to markers
         fitMapToMarkers();
+      });
+
+      // Add error handler
+      map.current.on('error', (e) => {
+        console.error('Mapbox error:', e);
+        toast({
+          title: "Map Error",
+          description: "There was an error loading the map. Please check the console for details.",
+          variant: "destructive",
+        });
       });
       
       // Cleanup function
@@ -336,7 +360,8 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
   };
 
   return (
-    <div className="relative w-full h-[calc(100vh-6rem)] bg-gray-50">
+    <div className="relative overflow-hidden w-full h-[calc(100vh-6rem)] bg-gray-50">
+
       {/* Map Container */}
       <div 
         ref={mapContainerRef} 
