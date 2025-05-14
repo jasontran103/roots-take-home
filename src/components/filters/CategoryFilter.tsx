@@ -29,12 +29,11 @@ const CategoryFilter: React.FC<CategoryFilterProps> = ({ activeCategory, onCateg
     { id: 'land', icon: <LandPlotIcon />, label: 'Land' },
     { id: 'assumable', icon: <DollarSignIcon />, label: 'Assumable' },
     { id: 'favorite', icon: <HeartIcon />, label: 'Favorites' },
-    { id: 'filters', icon: <FilterIcon />, label: 'Filters' },
   ];
 
   return (
     <div className="overflow-x-auto no-scrollbar">
-      <div className="flex gap-2 space-x-2">
+      <div className="flex space-x-2">
         {categories.map((category: { id: string; icon: React.ReactNode; label: string }) => (
           <Button
             key={category.id}
