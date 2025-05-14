@@ -88,7 +88,7 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
     assumable: boolean;
     status: ListingStatus;
   }>({
-    price: [200000, 1500000],
+    price: [100000, 1500000],
     listingAge: 120,
     assumable: false,
     status: ListingStatus.ACTIVE

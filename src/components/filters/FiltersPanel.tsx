@@ -53,9 +53,9 @@ export const FiltersPanel: React.FC<FiltersPanelProps> = ({
                 <label className="font-bold block mb-2">Price Range</label>
                 <Slider 
                   defaultValue={filters.price}
-                  min={200000}
-                  max={1500000}
-                  step={50000}
+                  min={100000}
+                  max={5000000}
+                  step={10000}
                   onValueChange={(value) => onFilterChange({...filters, price: value as [number, number]})}
                   className="mt-6"
                 />
