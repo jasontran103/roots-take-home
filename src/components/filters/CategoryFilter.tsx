@@ -32,7 +32,7 @@ const CategoryFilter: React.FC<CategoryFilterProps> = ({ activeCategory, onCateg
   ];
 
   return (
-    <div className="overflow-x-auto no-scrollbar">
+    <div className="overflow-x-auto no-scrollbar py-4 ml-4">
       <div className="flex space-x-2">
         {categories.map((category: { id: string; icon: React.ReactNode; label: string }) => (
           <Button
