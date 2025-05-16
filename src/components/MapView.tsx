@@ -1,10 +1,12 @@
 "use client";
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import type { Listing } from '@/generated/prisma';
 import { ListingStatus } from '@/generated/prisma';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { ViewportBounds } from '@/services/listing.service';
+import debounce from 'lodash.debounce';
 
 import { toggleFavorite, isFavorite } from '@/utils/localStorageUtils';
 import { PropertyInfoCard } from './property/PropertyInfoCard';
@@ -77,7 +79,11 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<{ [key: string]: mapboxgl.Marker }>({});
   const previousFilteredRef = useRef<Listing[]>([]);
-  
+  const moveEndTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastViewportRef = useRef<ViewportBounds | null>(null);
+  const loadedPropertiesRef = useRef<Set<string>>(new Set());
+  const fetchedBoundsRef = useRef<ViewportBounds[]>([]);
+  const isMovingRef = useRef(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Listing | null>(null);
   const [hoveredProperty, setHoveredProperty] = useState<Listing | null>(null);
@@ -97,6 +103,12 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
   const [showFilters, setShowFilters] = useState(false);
   const [showPropertyCards, setShowPropertyCards] = useState(true);
   const [displayedProperties, setDisplayedProperties] = useState<Listing[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+
+  // Add new state for map center
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
 
   // Memoize the filter function
   const filterProperties = useMemo(() => {
@@ -125,37 +137,125 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
     }
   }, []);
 
-  // Apply filters whenever filters change or properties change
-  useEffect(() => {
-    if (!properties) {
-      setFilteredProperties([]);
-      setDisplayedProperties([]);
-      onFilterChange?.([]);
-      return;
-    }
+  // Helper function to check if bounds are similar
+  const isSimilarBounds = (bounds1: ViewportBounds, bounds2: ViewportBounds): boolean => {
+    const threshold = 0.1; // About 10km
+    return (
+      Math.abs(bounds1.north - bounds2.north) < threshold &&
+      Math.abs(bounds1.south - bounds2.south) < threshold &&
+      Math.abs(bounds1.east - bounds2.east) < threshold &&
+      Math.abs(bounds1.west - bounds2.west) < threshold
+    );
+  };
 
-    const filtered = filterProperties;
-    
-    // Only update if the filtered results have changed
-    if (JSON.stringify(filtered) !== JSON.stringify(previousFilteredRef.current)) {
-      setFilteredProperties(filtered);
-      previousFilteredRef.current = filtered;
-      
-      // Update displayed properties (top 4 by price)
-      const topProperties = [...filtered]
-        .sort((a, b) => Number(a.price) - Number(b.price))
-        .slice(0, 4);
-      setDisplayedProperties(topProperties);
-      
-      // Notify parent of filter changes
-      onFilterChange?.(filtered);
+  // Helper function to check if bounds have been fetched
+  const hasFetchedBounds = (bounds: ViewportBounds): boolean => {
+    return fetchedBoundsRef.current.some(b => isSimilarBounds(b, bounds));
+  };
 
-      // Update markers if map is initialized
-      if (map.current) {
-        updateMapMarkers(filtered);
+  // Debounced fetch function
+  const debouncedFetch = useRef(
+    debounce(async (viewport: ViewportBounds) => {
+      if (isLoading || !hasMore || isMovingRef.current) return;
+      if (hasFetchedBounds(viewport)) return;
+
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/listings?viewport=${JSON.stringify(viewport)}&page=1&limit=50`);
+        if (!response.ok) throw new Error('Failed to fetch listings');
+        
+        const data = await response.json();
+        const newListings = data.listings.filter((listing: Listing) => !loadedPropertiesRef.current.has(listing.id));
+        
+        if (newListings.length === 0) {
+          setHasMore(false);
+          return;
+        }
+        
+        // Add to fetched bounds
+        fetchedBoundsRef.current.push(viewport);
+        
+        // Add new property IDs to the loaded set
+        newListings.forEach((listing: Listing) => loadedPropertiesRef.current.add(listing.id));
+        
+        // Update state with new listings
+        setFilteredProperties(prev => [...prev, ...newListings]);
+        setDisplayedProperties(prev => [...prev, ...newListings]);
+        
+        setHasMore(newListings.length === 50);
+        setPage(1);
+        lastViewportRef.current = viewport;
+
+        // Add markers for new listings
+        if (map.current && newListings.length > 0) {
+          newListings.forEach((property: Listing) => {
+            if (property.latitude == null || property.longitude == null) return;
+            if (markersRef.current[property.id]) return;
+
+            // Create and add marker
+            const markerEl = document.createElement('div');
+            markerEl.className = 'property-marker';
+            
+            const priceTag = document.createElement('div');
+            priceTag.className = `text-xs font-bold py-1 px-2 border-4 border-neo-black cursor-pointer transition-all rounded-none shadow-neo ${
+              property.id === selectedProperty?.id ? 'ring-4 ring-neo-red scale-125 z-50' : 
+              property.id === hoveredProperty?.id ? 'scale-110' : ''
+            } ${
+              isFavorite(property.id) ? 'bg-neo-yellow' : 
+              property.isAssumable ? 'bg-neo-green' : 
+              property.status === ListingStatus.PENDING ? 'bg-amber-300' : 
+              property.status === ListingStatus.SOLD ? 'bg-gray-400' : 'bg-neo-primary'
+            }`;
+            
+            const monthlyPayment = Math.round(Number(property.price) / 360);
+            priceTag.textContent = `$${monthlyPayment}/mo`;
+            
+            markerEl.appendChild(priceTag);
+            
+            const marker = new mapboxgl.Marker({
+              element: markerEl,
+              anchor: 'bottom',
+              offset: [0, -10]
+            })
+              .setLngLat([Number(property.longitude), Number(property.latitude)])
+              .addTo(map.current!);
+            
+            // Add click event
+            markerEl.addEventListener('click', () => {
+              setSelectedProperty(property);
+              setHoveredProperty(null);
+              map.current?.flyTo({
+                center: [Number(property.longitude), Number(property.latitude)],
+                zoom: 14,
+                duration: 1000,
+              });
+            });
+            
+            // Add hover events
+            markerEl.addEventListener('mouseenter', () => {
+              setHoveredProperty(property);
+              priceTag.className += ' scale-110';
+            });
+            markerEl.addEventListener('mouseleave', () => {
+              setHoveredProperty(null);
+              priceTag.className = priceTag.className.replace(' scale-110', '');
+            });
+            
+            markersRef.current[property.id] = marker;
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching listings:', error);
+        toast({
+          title: "Error Loading Listings",
+          description: "Failed to load property listings. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
       }
-    }
-  }, [filterProperties, onFilterChange]);
+    }, 500)
+  ).current;
 
   // Initialize Mapbox map when token is provided
   useEffect(() => {
@@ -173,8 +273,6 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
       console.error('Missing map container ref');
       return;
     }
-    
-    console.log('Initializing map with token length:', MAPBOX_TOKEN.length);
     
     // Initialize map
     mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -197,11 +295,38 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
       map.current.on('load', () => {
         console.log('Map loaded successfully');
         setMapLoaded(true);
-        // Add markers for properties
-        updateMapMarkers(properties);
         
-        // Fit map to markers
-        fitMapToMarkers();
+        // Get initial viewport and fetch listings
+        const bounds = map.current?.getBounds();
+        if (bounds) {
+          const viewport = {
+            north: bounds.getNorth(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            west: bounds.getWest()
+          };
+          debouncedFetch(viewport);
+        }
+      });
+
+      // Add movestart event listener
+      map.current.on('movestart', () => {
+        isMovingRef.current = true;
+      });
+
+      // Add moveend event listener
+      map.current.on('moveend', () => {
+        isMovingRef.current = false;
+        const bounds = map.current?.getBounds();
+        if (bounds) {
+          const viewport = {
+            north: bounds.getNorth(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            west: bounds.getWest()
+          };
+          debouncedFetch(viewport);
+        }
       });
 
       // Add error handler
@@ -216,6 +341,7 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
       
       // Cleanup function
       return () => {
+        debouncedFetch.cancel();
         map.current?.remove();
         map.current = null;
       };
@@ -227,97 +353,26 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
         variant: "destructive",
       });
     }
-  }, []); // Empty dependency array since this should only run once
+  }, [debouncedFetch]);
 
-  // Function to update map markers when filtered properties change
-  const updateMapMarkers = (properties: Listing[]) => {
-    if (!map.current) {
-      console.log('Map not initialized, cannot update markers');
+  // Update useEffect to handle filters without reloading
+  useEffect(() => {
+    if (!filteredProperties) {
+      setDisplayedProperties([]);
+      onFilterChange?.([]);
       return;
     }
-    
-    // Remove existing markers
-    Object.values(markersRef.current).forEach(marker => marker.remove());
-    markersRef.current = {};
-    
-    // Add new markers
-    properties.forEach(property => {
-      if (property.latitude == null || property.longitude == null) {
-        console.log('Property missing coordinates:', property);
-        return;
-      }
 
-      // Create custom marker element
-      const markerEl = document.createElement('div');
-      markerEl.className = 'property-marker';
-      
-      const priceTag = document.createElement('div');
-      priceTag.className = `text-xs font-bold py-1 px-2 border-4 border-neo-black cursor-pointer transition-all rounded-none shadow-neo ${
-        property.id === selectedProperty?.id ? 'ring-4 ring-neo-red scale-125 z-50' : 
-        property.id === hoveredProperty?.id ? 'scale-110' : ''
-      } ${
-        isFavorite(property.id) ? 'bg-neo-yellow' : 
-        property.isAssumable ? 'bg-neo-green' : 
-        property.status === ListingStatus.PENDING ? 'bg-amber-300' : 
-        property.status === ListingStatus.SOLD ? 'bg-gray-400' : 'bg-neo-primary'
-      }`;
-      
-      // Format price as monthly payment
-      const monthlyPayment = Math.round(Number(property.price) / 360);
-      priceTag.textContent = `$${monthlyPayment}/mo`;
-      
-      markerEl.appendChild(priceTag);
-      
-      const marker = new mapboxgl.Marker({
-        element: markerEl,
-        anchor: 'bottom',
-        offset: [0, -10]
-      })
-        .setLngLat([Number(property.longitude), Number(property.latitude)])
-        .addTo(map.current!);
-      
-      // Add click event
-      markerEl.addEventListener('click', () => {
-        setSelectedProperty(property);
-        setHoveredProperty(null);
-        map.current?.flyTo({
-          center: [Number(property.longitude), Number(property.latitude)],
-          zoom: 14,
-          duration: 1000,
-        });
-      });
-      // Add hover events
-      markerEl.addEventListener('mouseenter', () => {
-        setHoveredProperty(property);
-        priceTag.className += ' scale-110';
-      });
-      markerEl.addEventListener('mouseleave', () => {
-        setHoveredProperty(null);
-        priceTag.className = priceTag.className.replace(' scale-110', '');
-      });
-      // Store marker reference
-      markersRef.current[property.id] = marker;
-    });
-  };
-
-  // Fit map to markers
-  const fitMapToMarkers = () => {
-    if (!map.current || filteredProperties.length === 0) return;
+    const filtered = filterProperties;
     
-    // Calculate bounds
-    const bounds = new mapboxgl.LngLatBounds();
-    
-    filteredProperties.forEach(property => {
-      bounds.extend([Number(property.longitude), Number(property.latitude)]);
-    });
-    
-    // Fit map to bounds with padding
-    map.current.fitBounds(bounds, {
-      padding: 80,
-      maxZoom: 15,
-      duration: 1000,
-    });
-  };
+    // Only update if the filtered results have changed
+    if (JSON.stringify(filtered) !== JSON.stringify(previousFilteredRef.current)) {
+      setFilteredProperties(filtered);
+      previousFilteredRef.current = filtered;
+      setDisplayedProperties(filtered);
+      onFilterChange?.(filtered);
+    }
+  }, [filterProperties, onFilterChange]);
 
   const handleMarkerClick = (property: Listing) => {
     setSelectedProperty(property);
@@ -350,7 +405,7 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
     
     // Update markers to reflect new favorite status
     if (map.current) {
-      updateMapMarkers(filteredProperties);
+      debouncedFetch(lastViewportRef.current!);
     }
   };
   
@@ -419,7 +474,15 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
       {/* Map Controls */}
       <div className="absolute bottom-4 right-4 z-30">
         <MapControls
-          onResetView={fitMapToMarkers}
+          onResetView={() => {
+            if (map.current) {
+              map.current.flyTo({
+                center: [-122.4194, 37.7749],
+                zoom: 11,
+                duration: 1000,
+              });
+            }
+          }}
           showPropertyCards={showPropertyCards}
           onTogglePropertyCards={() => setShowPropertyCards(!showPropertyCards)}
         />

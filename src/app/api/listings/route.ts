@@ -1,46 +1,111 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { ListingService } from '@/services/listing.service'
+import { ViewportBounds } from '@/services/listing.service'
+import { prisma } from '@/lib/prisma'
+import { Prisma } from '@/generated/prisma'
 
 const listingService = new ListingService()
 
+// Helper function to handle BigInt serialization prisma returns BigInts for the id field
+function serializeListing(listing: any) {
+  return JSON.parse(JSON.stringify(listing, (_, value) =>
+    typeof value === 'bigint' ? value.toString() : value
+  ))
+}
+
 export async function GET(request: Request) {
+  // Parses the URL to get the query string it will be in the format of ?page=1&limit=50&viewport=viewport
   const { searchParams } = new URL(request.url)
-  const query = searchParams.get('query')
-  const id = searchParams.get('id')
-
+  const page = parseInt(searchParams.get('page') || '1')
+  const limit = parseInt(searchParams.get('limit') || '50')
+  const viewport = searchParams.get('viewport')
+  
   try {
-    if (id) {
-      const listing = await listingService.findById(id)
-      return NextResponse.json(listing)
+    let where: Prisma.ListingWhereInput = {
+      deletedAt: null,
     }
 
-    if (query) {
-      const listings = await listingService.search(query)
-      return NextResponse.json(listings)
+    // Add viewport filtering so we will only show listings within the visible area of the map
+    if (viewport) {
+      const { north, south, east, west } = JSON.parse(viewport)
+      where = {
+        ...where,
+        latitude: {
+          gte: south,
+          lte: north,
+        },
+        longitude: {
+          gte: west,
+          lte: east,
+        },
+      }
     }
 
-    const listings = await listingService.findAll()
-    return NextResponse.json(listings)
+    // Grab the listings for the current page 
+    const [listings, total] = await Promise.all([ // We use Promise.all to fetch the listings and the total number of listings simultaneously
+      prisma.listing.findMany({
+        where,
+        take: limit,
+        skip: (page - 1) * limit,
+        orderBy: {
+          createdAt: 'desc'
+        },
+        select: {
+          id: true,
+          address: true,
+          city: true,
+          state: true,
+          price: true,
+          bedrooms: true,
+          bathrooms: true,
+          squareFeet: true,
+          propertyType: true,
+          photoUrls: true,
+          status: true,
+          createdAt: true,
+          longitude: true,
+          latitude: true,
+          isAssumable: true,
+          listedAt: true,
+        }
+      }),
+      prisma.listing.count({ where })
+    ])
+
+    return NextResponse.json({
+      listings,
+      pagination: {
+        total,
+        pages: Math.ceil(total / limit),
+        currentPage: page,
+        limit
+      }
+    })
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch listings' }, { status: 500 })
+    console.error('Error fetching listings:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch listings' },
+      { status: 500 }
+    )
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const data = await request.json()
     const listing = await listingService.create(data)
-    return NextResponse.json(listing, { status: 201 })
+    return NextResponse.json(serializeListing(listing), { status: 201 })
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to create listing' }, { status: 500 })
+    console.error('Error in POST /api/listings:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
     const data = await request.json()
     const listing = await listingService.update(data)
-    return NextResponse.json(listing)
+    return NextResponse.json(serializeListing(listing))
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update listing' }, { status: 500 })
   }
