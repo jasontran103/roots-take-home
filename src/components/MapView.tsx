@@ -57,16 +57,57 @@ const formatBathrooms = (bathrooms: any): string => {
   return Number(bathrooms).toString();
 };
 
-const getStatusColor = (status: ListingStatus): string => {
+const getStatusColor = (status: ListingStatus, isAssumable: boolean, isFavorite: boolean): string => {
+  if (isFavorite) return 'bg-neo-red';
+  if (isAssumable) return 'bg-neo-green';
+
   switch (status) {
+    // Active states - Primary color
     case ListingStatus.ACTIVE:
-      return 'text-neo-green';
+    case ListingStatus.ACTIVE_CONTINGENT:
+    case ListingStatus.ACTIVE_KICK_OUT:
+    case ListingStatus.ACTIVE_OPTION_CONTRACT:
+    case ListingStatus.ACTIVE_UNDER_CONTRACT:
+    case ListingStatus.ACTIVE_WITH_CONTRACT:
+    case ListingStatus.NEW:
+    case ListingStatus.COMING_SOON:
+      return 'bg-neo-primary';
+
+    // Pending states - Yellow/Amber shades
     case ListingStatus.PENDING:
-      return 'text-neo-yellow';
+    case ListingStatus.PENDING_CONTINUE_TO_SHOW:
+    case ListingStatus.PENDING_NO_SHOW:
+    case ListingStatus.PENDING_TAKING_BACKUPS:
+    case ListingStatus.CONTINGENT:
+    case ListingStatus.CONTINGENT_CONTINUE_TO_SHOW:
+    case ListingStatus.CONTINGENT_NO_SHOW:
+    case ListingStatus.IN_CONTRACT:
+    case ListingStatus.UNDER_CONTRACT:
+      return 'bg-neo-yellow';
+
+    // Sold/Closed states - Gray shades
     case ListingStatus.SOLD:
-      return 'text-neo-gray';
+    case ListingStatus.CLOSED:
+    case ListingStatus.LEASED:
+    case ListingStatus.RENTED:
+      return 'bg-gray-400';
+
+    // Off market states - Blue shades
+    case ListingStatus.OFF_MARKET:
+    case ListingStatus.TEMPORARILY_OFF_MARKET:
+    case ListingStatus.HOLD:
+    case ListingStatus.RESERVED:
+      return 'bg-blue-400';
+
+    // Special states - Purple shades
+    case ListingStatus.AUCTION:
+    case ListingStatus.SHORT_SALE:
+    case ListingStatus.PRE_FORECLOSURE:
+      return 'bg-purple-400';
+
+    // Default/Unknown or fallback to primary color
     default:
-      return 'text-neo-primary';
+      return 'bg-neo-primary';
   }
 };
 
@@ -212,10 +253,7 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
               property.id === selectedProperty?.id ? 'ring-4 ring-neo-red scale-125 z-50' : 
               property.id === hoveredProperty?.id ? 'scale-110' : ''
             } ${
-              isFavorite(property.id) ? 'bg-neo-yellow' : 
-              property.isAssumable ? 'bg-neo-green' : 
-              property.status === ListingStatus.PENDING ? 'bg-amber-300' : 
-              property.status === ListingStatus.SOLD ? 'bg-gray-400' : 'bg-neo-primary'
+              getStatusColor(property.status, property.isAssumable, favorites.includes(property.id))
             }`;
             
             const monthlyPayment = Math.round(Number(property.price) / 360);
@@ -414,9 +452,22 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
       setFavorites(prev => prev.filter(id => id !== propertyId));
     }
     
-    // Update markers to reflect new favorite status
-    if (map.current) {
-      debouncedFetch(lastViewportRef.current!);
+    // Update marker color immediately
+    const marker = markersRef.current[propertyId];
+    if (marker) {
+      const markerEl = marker.getElement();
+      const priceTag = markerEl.querySelector('div');
+      if (priceTag) {
+        const property = displayedProperties.find(p => p.id === propertyId);
+        if (property) {
+          priceTag.className = `text-xs font-bold py-1 px-2 border-4 border-neo-black cursor-pointer transition-all rounded-none shadow-neo ${
+            property.id === selectedProperty?.id ? 'ring-4 ring-neo-red scale-125 z-50' : 
+            property.id === hoveredProperty?.id ? 'scale-110' : ''
+          } ${
+            getStatusColor(property.status, property.isAssumable, isFav)
+          }`;
+        }
+      }
     }
   };
   
