@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Header from "./Header";
-import CategoryFilters from "@/components/filters/CategoryFilter";
+import CategoryFilters from "@/components/layout/CategoryFilter";
 
 interface LayoutProps {
   children: React.ReactNode;
