@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Layout from "@/components/layout/Layout";
 import MapView from "@/components/MapView";
-import CategoryFilters, { CategoryType } from "@/components/filters/CategoryFilter";
+import CategoryFilters, { CategoryType } from "@/components/layout/CategoryFilter";
 import type { Listing } from "@/generated/prisma";
 
 export default function Home() {
@@ -12,16 +12,17 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchRecentListings = async () => {
+  const fetchListings = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/listings/recent");
+      const response = await fetch("/api/listings?page=1&limit=100");
       if (!response.ok) {
         throw new Error("Failed to fetch listings");
       }
       const data = await response.json();
-      setProperties(data);
+      setProperties(data.listings);
+      setFilteredProperties(data.listings);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -30,7 +31,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchRecentListings();
+    fetchListings();
   }, []);
 
   const handleFilterChange = (filtered: Listing[]) => {
