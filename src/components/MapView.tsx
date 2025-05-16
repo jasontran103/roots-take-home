@@ -23,10 +23,6 @@ interface MapViewProps {
 // Mapbox token from environment variables
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_API_SECRET_KEY || '';
 
-// Add debug logging
-console.log('Mapbox token length:', MAPBOX_TOKEN.length);
-console.log('Mapbox token first 4 chars:', MAPBOX_TOKEN.substring(0, 4));
-
 // Add helper function to get status background color
 const getStatusBackground = (status: ListingStatus, isAssumable: boolean, isFavorite: boolean): string => {
   if (isFavorite) return 'bg-neo-yellow';
@@ -68,7 +64,7 @@ const getStatusColor = (status: ListingStatus): string => {
     case ListingStatus.PENDING:
       return 'text-neo-yellow';
     case ListingStatus.SOLD:
-      return 'text-neo-500';
+      return 'text-neo-gray';
     default:
       return 'text-neo-primary';
   }
@@ -179,8 +175,23 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
         newListings.forEach((listing: Listing) => loadedPropertiesRef.current.add(listing.id));
         
         // Update state with new listings
-        setFilteredProperties(prev => [...prev, ...newListings]);
-        setDisplayedProperties(prev => [...prev, ...newListings]);
+        setFilteredProperties(prev => {
+          // Create a Map to deduplicate properties by ID
+          const uniqueProperties = new Map();
+          [...prev, ...newListings].forEach(property => {
+            uniqueProperties.set(property.id, property);
+          });
+          return Array.from(uniqueProperties.values());
+        });
+        
+        setDisplayedProperties(prev => {
+          // Create a Map to deduplicate properties by ID
+          const uniqueProperties = new Map();
+          [...prev, ...newListings].forEach(property => {
+            uniqueProperties.set(property.id, property);
+          });
+          return Array.from(uniqueProperties.values());
+        });
         
         setHasMore(newListings.length === 50);
         setPage(1);
@@ -446,16 +457,20 @@ const MapView: React.FC<MapViewProps> = ({ properties = [], onFilterChange }) =>
       {/* Property Cards */}
       {showPropertyCards && (
         <div className="absolute right-4 top-4 w-80 z-30 flex flex-col space-y-3 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neo-black scrollbar-track-gray-100">
-          {displayedProperties.map(property => (
-            <PropertyCard
-              key={property.id}
-              property={property}
-              isSelected={selectedProperty?.id === property.id}
-              favorites={favorites}
-              onSelect={handleMarkerClick}
-              onToggleFavorite={handleToggleFavorite}
-            />
-          ))}
+          {Array.from(new Set(displayedProperties.map(p => p.id))).map(propertyId => {
+            const property = displayedProperties.find(p => p.id === propertyId);
+            if (!property) return null;
+            return (
+              <PropertyCard
+                key={`property-${propertyId}`}
+                property={property}
+                isSelected={selectedProperty?.id === propertyId}
+                favorites={favorites}
+                onSelect={handleMarkerClick}
+                onToggleFavorite={handleToggleFavorite}
+              />
+            );
+          })}
         </div>
       )}
 
